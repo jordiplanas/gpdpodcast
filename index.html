@@ -42,14 +42,14 @@
     const noSleep = new NoSleep();
     let map, userMarker, watchID;
     const puntosInteres = [
-        { id: "Punto 1", lat: 40.4167, lng: -3.7033, audio: 'punto1.mp3', reproducido: false },
-        { id: "Punto 2", lat: 40.4190, lng: -3.7050, audio: 'punto2.mp3', reproducido: false }
+        { id: "Punto 1", lat: 41.481406, lng: 2.073040, audio: 'punto1.mp3', reproducido: false },
+        { id: "Punto 2", lat: 41.467869, lng: 2.078233, audio: 'punto2.mp3', reproducido: false }
     ];
     const audioPlayer = new Audio();
 
     // Inicializar Mapa
     function initMap() {
-        map = L.map('map').setView([40.4167, -3.7033], 15);
+        map = L.map('map').setView([41.481406, 2.073040], 15);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap'
         }).addTo(map);
