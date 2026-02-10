@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Guía GPS Profesional</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nosleep/0.12.0/NoSleep.min.js"></script>
+    <style>
+        :root { --primary: #007bff; --success: #28a745; --danger: #dc3545; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; padding: 20px; background: #eceff1; color: #333; }
+        .container { max-width: 450px; margin: auto; background: white; padding: 25px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+        
+        select { width: 100%; padding: 12px; margin: 15px 0; border-radius: 8px; border: 1px solid #ddd; font-size: 16px; }
+        
+        .controls { display: flex; flex-direction: column; gap: 10px; }
+        button { width: 100%; padding: 15px; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        
+        #startBtn { background: var(--primary); color: white; }
+        #startBtn.active { background: var(--success); }
+        
+        #restartBtn { background: #f8f9fa; color: var(--danger); border: 1px solid var(--danger); display: none; }
+        #restartBtn:hover { background: var(--danger); color: white; }
+
+        #status { margin-top: 20px; font-weight: bold; color: var(--primary); min-height: 24px; }
+        .log { font-size: 11px; color: #777; margin-top: 25px; text-align: left; height: 120px; overflow-y: auto; background: #f9f9f9; padding: 10px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>RoadTrip Audio Guide</h2>
+    
+    <label>Idioma del Tour:</label>
+    <select id="idioma">
+        <option value="es">Español 🇪🇸</option>
+        <option value="en">English 🇬🇧</option>
+        <option value="fr">Français 🇫🇷</option>
+        <option value="de">Deutsch 🇩🇪</option>
+        <option value="it">Italiano 🇮🇹</option>
+        <option value="pt">Português 🇵🇹</option>
+        </select>
+
+    <div class="controls">
+        <button id="startBtn">COMENZAR RUTA</button>
+        <button id="restartBtn">REINICIAR TOUR</button>
+    </div>
+    
+    <div id="status">Pulsa "Comenzar" para activar GPS</div>
+    
+    <div class="log" id="log"></div>
+</div>
+
+<script>
+    const startBtn = document.getElementById('startBtn');
+    const restartBtn = document.getElementById('restartBtn');
+    const status = document.getElementById('status');
+    const log = document.getElementById('log');
+    const selectIdioma = document.getElementById('idioma');
+    const noSleep = new NoSleep();
+
+    let puntosInteres = [
+        { id: "Punto 1", lat: 40.4167, lng: -3.7033, audio: 'intro.mp3', reproducido: false },
+        { id: "Punto 2", lat: 40.4180, lng: -3.7040, audio: 'historia.mp3', reproducido: false }
+    ];
+
+    let audioPlayer = new Audio();
+    let watchID = null;
+
+    function addLog(msg) {
+        const entry = document.createElement('div');
+        entry.innerText = `> ${msg}`;
+        log.prepend(entry);
+    }
+
+    function getDistancia(lat1, lon1, lat2, lon2) {
+        const R = 6371;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+        return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+    }
+
+    function activarGPS() {
+        if (watchID) navigator.geolocation.clearWatch(watchID);
+        
+        watchID = navigator.geolocation.watchPosition((pos) => {
+            const { latitude, longitude } = pos.coords;
+            const idioma = selectIdioma.value;
+
+            status.innerText = `📍 Buscando puntos... (${latitude.toFixed(4)})`;
+
+            puntosInteres.forEach(punto => {
+                const dist = getDistancia(latitude, longitude, punto.lat, punto.lng);
+                
+                // Si estamos a menos de 200 metros (0.2 km)
+                if (dist < 0.20 && !punto.reproducido) {
+                    punto.reproducido = true;
+                    audioPlayer.src = `audios/${idioma}/${punto.audio}`;
+                    audioPlayer.play();
+                    addLog(`Reproduciendo: ${punto.id}`);
+                }
+            });
+        }, (err) => {
+            addLog("Error GPS: " + err.message);
+        }, { enableHighAccuracy: true });
+    }
+
+    startBtn.addEventListener('click', () => {
+        noSleep.enable(); // Evita que se bloquee el móvil
+        startBtn.innerText = "SISTEMA ACTIVO";
+        startBtn.className = "active";
+        restartBtn.style.display = "block";
+        status.innerText = "GPS Conectado. Conduce con cuidado.";
+        addLog("Tour iniciado.");
+        activarGPS();
+    });
+
+    restartBtn.addEventListener('click', () => {
+        if(confirm("¿Quieres reiniciar el tour? Los audios volverán a sonar al pasar por los puntos.")){
+            puntosInteres.forEach(p => p.reproducido = false);
+            addLog("Tour reiniciado. Todos los puntos disponibles.");
+            status.innerText = "Tour reiniciado. Buscando puntos...";
+        }
+    });
+</script>
+
+</body>
+</html>
