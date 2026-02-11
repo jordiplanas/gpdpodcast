@@ -3,21 +3,75 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audio Guía con Mapa</title>
+    <title>Audio Guía GPS Pro</title>
     
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nosleep/0.12.0/NoSleep.min.js"></script>
 
     <style>
-        body { font-family: sans-serif; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; }
-        #map { flex-grow: 1; height: 70vh;  width: 100%;background: #e0e0e0; } 
-        .ui-panel { padding: 15px; background: white; z-index: 1000; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; background: #f4f4f9; }
+        
+        #map { flex-grow: 1; height: 60vh; width: 100%; background: #e0e0e0; } 
+
+        .ui-panel { 
+            padding: 20px; 
+            background: white; 
+            z-index: 1000; 
+            box-shadow: 0 -5px 15px rgba(0,0,0,0.1); 
+            border-radius: 20px 20px 0 0;
+        }
+
+        /* Estilos de la barra de progreso */
+        .progress-container {
+            width: 100%;
+            background: #eee;
+            height: 12px;
+            border-radius: 6px;
+            margin: 10px 0;
+            overflow: hidden;
+            border: 1px solid #ddd;
+        }
+        #progress-bar {
+            width: 0%;
+            height: 100%;
+            background: #28a745;
+            transition: width 0.2s ease;
+        }
+
+        /* Historial de audios */
+        #historial {
+            margin-top: 10px;
+            max-height: 80px;
+            overflow-y: auto;
+            border-top: 1px solid #eee;
+            padding-top: 10px;
+        }
+        .visto-item {
+            font-size: 13px;
+            color: #555;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+        }
+
         .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
-        button { padding: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; }
+        
+        button { 
+            padding: 15px; 
+            border-radius: 10px; 
+            border: none; 
+            font-weight: bold; 
+            cursor: pointer; 
+            transition: opacity 0.2s;
+        }
         #startBtn { background: #007bff; color: white; }
         #restartBtn { background: #dc3545; color: white; }
-        select { width: 100%; padding: 10px; border-radius: 5px; }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
+        
+        select { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc; background: #fff; }
+        
+        #status { font-size: 13px; margin-top: 8px; text-align: center; color: #666; font-weight: 500; }
     </style>
 </head>
 <body>
@@ -29,79 +83,134 @@
         <option value="es">Español 🇪🇸</option>
         <option value="en">English 🇬🇧</option>
         <option value="fr">Français 🇫🇷</option>
-        </select>
+    </select>
+
+    <div class="progress-container">
+        <div id="progress-bar"></div>
+    </div>
 
     <div class="controls">
-        <button id="startBtn">COMENZAR</button>
+        <button id="startBtn">COMENZAR RUTA</button>
         <button id="restartBtn">REINICIAR</button>
     </div>
-    <div id="status" style="font-size: 12px; margin-top: 5px; text-align: center;">Pulsa comenzar para activar GPS</div>
+
+    <div id="status">Pulsa comenzar para activar GPS</div>
+
+    <div id="historial">
+        <div style="font-size: 12px; font-weight: bold; color: #999; margin-bottom: 5px;">HISTORIAL DE REPRODUCCIÓN:</div>
+        <div id="lista-reproducidos"></div>
+    </div>
 </div>
 
 <script>
-    //41.508821, 2.091130  41.511376, 2.095057
     const noSleep = new NoSleep();
     let map, userMarker, watchID;
+    
+    // Configuración de Puntos de Interés
     const puntosInteres = [
-        { id: "Punto 1", lat: 41.508821, lng: 2.091130, audio: 'punto1.mp3', reproducido: false },
-        { id: "Punto 2", lat: 41.511376, lng: 2.095057, audio: 'punto2.mp3', reproducido: false }
+        { id: "Punto 1: Bienvenida", lat: 41.508821, lng: 2.091130, audio: 'punto1.mp3', reproducido: false },
+        { id: "Punto 2: Monumento Central", lat: 41.511376, lng: 2.095057, audio: 'punto2.mp3', reproducido: false }
     ];
-    const audioPlayer = new Audio();
 
-    // Inicializar Mapa
+    const audioPlayer = new Audio();
+    const progressBar = document.getElementById('progress-bar');
+    const listaVistos = document.getElementById('lista-reproducidos');
+
+    // --- LÓGICA DE AUDIO ---
+
+    // Actualizar barra de progreso mientras suena el audio
+    audioPlayer.addEventListener('timeupdate', () => {
+        if (audioPlayer.duration) {
+            const porcentaje = (audioPlayer.currentTime / audioPlayer.duration) * 100;
+            progressBar.style.width = porcentaje + '%';
+        }
+    });
+
+    // Resetear barra al terminar
+    audioPlayer.addEventListener('ended', () => {
+        progressBar.style.width = '0%';
+        document.getElementById('status').innerText = "Esperando siguiente punto...";
+    });
+
+    function agregarAlHistorial(nombre) {
+        const item = document.createElement('div');
+        item.className = 'visto-item';
+        item.innerHTML = `✅ ${nombre}`;
+        listaVistos.prepend(item); // Añade el más reciente arriba
+    }
+
+    // --- LÓGICA DE MAPA Y GPS ---
+
     function initMap() {
-        map = L.map('map').setView([41.481406, 2.073040], 15);
+        // Coordenadas iniciales (puedes ajustarlas al centro de tu ruta)
+        map = L.map('map').setView([41.5088, 2.0911], 15);
+        
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap'
         }).addTo(map);
 
-        // Dibujar los puntos de interés en el mapa
         puntosInteres.forEach(p => {
             L.marker([p.lat, p.lng]).addTo(map).bindPopup(p.id);
-            L.circle([p.lat, p.lng], { radius: 150, color: 'blue', fillOpacity: 0.1 }).addTo(map);
+            L.circle([p.lat, p.lng], { radius: 150, color: '#007bff', fillOpacity: 0.1 }).addTo(map);
         });
 
-        // Marcador del usuario (círculo rojo)
-        userMarker = L.circleMarker([0,0], { radius: 8, color: 'red', fillColor: '#f03', fillOpacity: 1 }).addTo(map);
+        // Marcador del usuario
+        userMarker = L.circleMarker([0,0], { 
+            radius: 10, 
+            color: 'white', 
+            weight: 3,
+            fillColor: '#007bff', 
+            fillOpacity: 1 
+        }).addTo(map);
     }
 
     function getDistancia(lat1, lon1, lat2, lon2) {
-        const R = 6371;
+        const R = 6371; // Radio Tierra en km
         const dLat = (lat2 - lat1) * Math.PI / 180;
         const dLon = (lon2 - lon1) * Math.PI / 180;
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) + 
+                  Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2) * Math.sin(dLon/2);
         return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
     }
 
     document.getElementById('startBtn').addEventListener('click', function() {
         noSleep.enable();
         this.disabled = true;
-        this.innerText = "ACTIVO";
+        this.innerText = "GPS ACTIVO";
+        this.style.background = "#28a745";
         
         watchID = navigator.geolocation.watchPosition(pos => {
             const { latitude, longitude } = pos.coords;
             const idioma = document.getElementById('idioma').value;
             
-            // Actualizar posición del usuario en el mapa
             const newPos = [latitude, longitude];
             userMarker.setLatLng(newPos);
-            map.panTo(newPos); // El mapa sigue al coche
+            map.flyTo(newPos, 16, { animate: true, duration: 1 });
 
             puntosInteres.forEach(p => {
                 const dist = getDistancia(latitude, longitude, p.lat, p.lng);
+                
+                // Si está a menos de 150 metros y no se ha reproducido
                 if (dist < 0.15 && !p.reproducido) {
                     p.reproducido = true;
                     audioPlayer.src = `./audios/${idioma}/${p.audio}`;
-                    audioPlayer.play();
-                    document.getElementById('status').innerText = "Reproduciendo: " + p.id;
+                    audioPlayer.play().catch(e => console.log("Error al reproducir: ", e));
+                    
+                    document.getElementById('status').innerText = "🔊 Reproduciendo: " + p.id;
+                    agregarAlHistorial(p.id);
                 }
             });
-        }, err => console.error(err), { enableHighAccuracy: true });
+        }, err => {
+            console.error(err);
+            alert("Error de GPS: Asegúrate de dar permisos de ubicación.");
+        }, { enableHighAccuracy: true });
     });
 
     document.getElementById('restartBtn').addEventListener('click', () => {
         puntosInteres.forEach(p => p.reproducido = false);
-        alert("Tour reiniciado");
+        listaVistos.innerHTML = "";
+        progressBar.style.width = "0%";
+        alert("Tour reiniciado. Los audios volverán a sonar al pasar por los puntos.");
     });
 
     initMap();
